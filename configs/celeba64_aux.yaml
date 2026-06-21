@@ -1,0 +1,36 @@
+# CelebA-64 + Auxiliary Reconstruction. Based on celeba64.yaml.
+# aux_scales: 2 because CelebA collapses BOTH coarse and middle (unlike CIFAR-10 which only collapses coarse).
+# Middle raw MSE is ~4× coarse (16×16×3 vs 8×8×3 pixels); raise aux_weight[1] if middle KL stays at 0.
+
+model:
+  input_channels: 3
+  input_size: 64
+  initial_channels: 64
+  num_scales: 3
+  num_groups_per_scale: 20
+  is_adaptive: true
+  min_groups_per_scale: 1
+  num_prepost_blocks: 1
+  num_prepost_cells: 2
+  num_cells_per_group: 2
+  num_latent_per_group: 20
+  num_logistic_mixtures: 10
+  use_se: true
+  res_dist: true
+  aux_recon: true
+  aux_scales: 2                  # coarse (8×8) + middle (16×16) heads
+
+training:
+  epochs: 90
+  batch_size: 16
+  base_lr: 0.01
+  lr_min: 0.0001
+  warmup_epochs: 5
+  kl_anneal_portion: 0.3
+  kl_const_portion: 0.0001
+  weight_decay_norm: 0.1
+  bn_weight_decay: 0.01
+  grad_clip: 200.0
+  optimizer: adamax
+  weight_decay: 0.0003
+  aux_weight: [1.0, 1.0]         # [coarse, middle]

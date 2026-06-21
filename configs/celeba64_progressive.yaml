@@ -1,0 +1,37 @@
+# CelebA-64 + Progressive Scale Training. Based on celeba64.yaml.
+# Unlocks scales coarse→fine; each locked scale has q=p (KL=0, no encoder gradient),
+# forcing active coarse groups to carry reconstruction before fine groups are introduced.
+# Finer scales unlock at lower LR (cosine spans all epochs) — push boundaries earlier if fine groups underfit.
+
+model:
+  input_channels: 3
+  input_size: 64
+  initial_channels: 64
+  num_scales: 3
+  num_groups_per_scale: 20
+  is_adaptive: true
+  min_groups_per_scale: 1
+  num_prepost_blocks: 1
+  num_prepost_cells: 2
+  num_cells_per_group: 2
+  num_latent_per_group: 20
+  num_logistic_mixtures: 10
+  use_se: true
+  res_dist: true
+
+training:
+  epochs: 90
+  batch_size: 16
+  base_lr: 0.01
+  lr_min: 0.0001
+  warmup_epochs: 5
+  kl_anneal_portion: 0.3
+  kl_const_portion: 0.0001
+  weight_decay_norm: 0.1
+  bn_weight_decay: 0.01
+  grad_clip: 200.0
+  optimizer: adamax
+  weight_decay: 0.0003
+  progressive: true
+  progressive_epochs: [15, 30]   # unlock middle @15, fine @30 (len = num_scales-1)
+  progressive_kl_warmup: 3        # epochs to ramp a newly-unlocked scale's KL 0→1

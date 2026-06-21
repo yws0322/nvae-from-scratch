@@ -1,0 +1,31 @@
+# MNIST config — 1-channel 28x28 padded to 32x32
+# Matches official NVAE MNIST command (README)
+model:
+  input_channels: 1
+  input_size: 32
+  initial_channels: 32
+  num_scales: 2
+  num_groups_per_scale: 10
+  is_adaptive: true
+  min_groups_per_scale: 1
+  num_prepost_blocks: 2
+  num_prepost_cells: 3
+  num_cells_per_group: 2
+  num_latent_per_group: 20
+  num_logistic_mixtures: 10
+  use_se: true
+  res_dist: true
+
+training:
+  epochs: 400
+  batch_size: 200
+  base_lr: 0.01
+  lr_min: 0.0001
+  warmup_epochs: 5
+  kl_anneal_portion: 0.3
+  kl_const_portion: 0.0
+  weight_decay_norm: 0.01
+  weight_decay: 0.0003
+  bn_weight_decay: 0.01
+  grad_clip: 200.0
+  optimizer: adamax

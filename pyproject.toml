@@ -1,0 +1,18 @@
+[project]
+name = "nvae-from-scratch"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.10"
+dependencies = [
+    "huggingface_hub>=0.26",
+    "pandas>=2.3.3",
+    "pillow>=11.0",
+    "pyarrow>=18.0",
+    "pyyaml>=6.0.3",
+    "torch==2.5.1",
+    "torchvision==0.20.1",
+    "wandb>=0.18",
+]
+
+[tool.uv]
+extra-index-url = ["https://download.pytorch.org/whl/cu121"]
