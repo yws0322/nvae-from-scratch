@@ -105,7 +105,7 @@ Key arguments:
 IW-NLL with K=200 importance samples:
 
 ```bash
-uv run python evaluation.py --ckpt runs/cifar10_last.pt --K 200
+uv run python evaluation.py --ckpt ckpts/cifar10.pt --K 200
 ```
 
 ## Visualization
@@ -114,19 +114,19 @@ All scripts run from the project root.
 
 ```bash
 # unconditional samples
-uv run python figures/sample.py --ckpt runs/celeba64_last.pt --config configs/celeba64.yaml --dataset celeba64 --t 0.7 --n 64
+uv run python figures/sample.py --ckpt ckpts/celeba64.pt --config configs/celeba64.yaml --dataset celeba64 --t 0.7 --n 64
 
 # original vs. reconstruction
-uv run python figures/reconstruction.py --ckpt runs/cifar10_last.pt --config configs/cifar10.yaml --dataset cifar10
+uv run python figures/reconstruction.py --ckpt ckpts/cifar10.pt --config configs/cifar10.yaml --dataset cifar10
 
 # latent interpolation between two images
-uv run python figures/latent_interpolation.py --ckpt runs/celeba64_last.pt --config configs/celeba64.yaml img1.png img2.png --steps 6
+uv run python figures/latent_interpolation.py --ckpt ckpts/celeba64.pt --config configs/celeba64.yaml img1.png img2.png --steps 6
 
 # per-group latent exploration
-uv run python figures/latent_space_exploration.py --ckpt runs/cifar10_8x3_last.pt --config configs/cifar10_8x3.yaml
+uv run python figures/latent_space_exploration.py --ckpt ckpts/cifar10_8x3.pt --config configs/cifar10_8x3.yaml
 
 # interactive cherry-picking
-uv run python figures/cherry.py --ckpt runs/celeba64_last.pt --config configs/celeba64.yaml --t 0.7 --winners 9
+uv run python figures/cherry.py --ckpt ckpts/celeba64.pt --config configs/celeba64.yaml --t 0.7 --winners 9
 ```
 
 ## Results

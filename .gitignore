@@ -225,3 +225,5 @@ __marimo__/
 
 logs/
 dataset/
+samples/
+ckpts/
