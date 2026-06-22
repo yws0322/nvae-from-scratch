@@ -76,23 +76,16 @@ def main():
     C = cfg['model']['input_channels']
     bpd_norm = H * W * C * 0.6931472
 
+    # val ELBO
     if not args.no_eval:
         val_ds = get_dataset(args.dataset, args.data_path, train=False)
         val_loader = torch.utils.data.DataLoader(
             val_ds, batch_size=100, num_workers=4, pin_memory=True)
 
-        print('Recalibrating BN stats on val data...')
-        model.train()
-        with torch.no_grad():
-            for i, (x, _) in enumerate(val_loader):
-                model(x.to(device))
-                if i >= 49:
-                    break
-
         print('Running val eval...')
         eval_val(model, val_loader, device, bpd_norm, args.dataset)
 
-    # BN warmup for sampling temperature
+    # BN recalibration + sample
     print(f'\nWarming up BN for t={args.t} ({args.bn_iters} iters)...')
     bn_saved = set_bn(model, device, t=args.t, num_samples=2, iters=args.bn_iters)
 

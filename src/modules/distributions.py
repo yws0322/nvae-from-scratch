@@ -38,13 +38,7 @@ class Normal:
 
 
 class DiscMixLogistic:
-    """Mixture of K discretized logistic distributions for 3-channel (RGB) images.
-
-    Logits layout (dim 1): [K mix_weights | K*9 per-channel params]
-    Per-channel params (for K mixtures, 3 channels): means(3) + log_scales(3) + coeffs(3)
-    Channel dependency: green = mu_g + c0*r, blue = mu_b + c1*r + c2*g.
-    Input x is expected in [-1, 1].
-    """
+    """Mixture of K discretized logistic distributions for 3-channel (RGB) images."""
 
     def __init__(self, logits, num_bits=8):
         B, C, H, W = logits.shape
@@ -62,7 +56,7 @@ class DiscMixLogistic:
         B, _, H, W = x.shape
         x = x.unsqueeze(1).expand(-1, self.K, -1, -1, -1)  # (B, K, 3, H, W)
 
-        # Channel-dependent means
+        # adjust means for inter-channel dependencies (r → g → b)
         m0 = self.means[:, :, 0]
         m1 = self.means[:, :, 1] + self.coeffs[:, :, 0] * x[:, :, 0]
         m2 = (self.means[:, :, 2]
@@ -87,8 +81,9 @@ class DiscMixLogistic:
             F.logsigmoid(centered) + F.logsigmoid(-centered)
             + math.log(2 * half_bin) - self.log_scales,
         )
-        log_low = torch.log(cdf_plus.clamp(min=1e-10))           # at x = -1
-        log_high = torch.log((1.0 - cdf_minus).clamp(min=1e-10)) # at x = +1
+        # boundary handling: lower edge uses CDF(x+half), upper uses 1-CDF(x-half)
+        log_low = torch.log(cdf_plus.clamp(min=1e-10))
+        log_high = torch.log((1.0 - cdf_minus).clamp(min=1e-10))
 
         log_prob = torch.where(x < -0.999, log_low,
                                torch.where(x > 0.99, log_high, log_mid))

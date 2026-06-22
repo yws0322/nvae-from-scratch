@@ -14,9 +14,6 @@ CHANNEL_MULT = 2  # channels double at each scale/preprocess transition
 
 
 def _effective_weight(layer):
-    # weight_norm only refreshes layer.weight inside forward(); a never-forwarded layer
-    # (locked sampler in progressive training) keeps a stale, possibly CPU-bound .weight.
-
     from torch.nn.utils.weight_norm import WeightNorm
     for hook in layer._forward_pre_hooks.values():
         if isinstance(hook, WeightNorm):
@@ -25,7 +22,6 @@ def _effective_weight(layer):
 
 
 def groups_per_scale(num_scales, num_groups, is_adaptive, min_groups=1):
-    # gps[0] = finest scale (most groups); gps[-1] = coarsest.
     g, n = [], num_groups
     for _ in range(num_scales):
         g.append(n)
@@ -59,6 +55,7 @@ class AutoEncoder(nn.Module):
         )
         self.num_nf_cells = cfg.get('num_nf_cells', 0)
 
+        # stem + pre-process blocks (downsample to encoder resolution)
         self.stem = nn.Conv2d(C_in, C0, 3, padding=1, bias=True)
 
         self.pre_blocks = nn.ModuleList()
@@ -75,6 +72,7 @@ class AutoEncoder(nn.Module):
                     block.append(ResidualCellEncoder(C_i, C_i, stride=1, use_se=self.use_se))
             self.pre_blocks.append(block)
 
+        # encoder tower
         self.enc_cells = nn.ModuleList()
         self.enc_combiners = nn.ModuleList()
         self.enc_downs = nn.ModuleList()
@@ -102,6 +100,7 @@ class AutoEncoder(nn.Module):
             nn.SiLU(),
         )
 
+        # posterior/prior samplers (enc_samplers: q params, dec_samplers: p params)
         self.enc_samplers = nn.ModuleList()
         self.dec_samplers = nn.ModuleList()
 
@@ -122,16 +121,11 @@ class AutoEncoder(nn.Module):
                     )
             dec_mult /= CHANNEL_MULT
 
-        # group_scale[g]: decoder scale index (0=coarsest) for global group g.
         self.group_scale = []
         for s in range(self.num_scales):
             enc_s = self.num_scales - 1 - s
             self.group_scale.extend([s] * self.gps[enc_s])
 
-        # Map decoder group g → its EncCombinerCell for SR/BN exclusion during progressive training.
-        # DDP marks locked modules "ready" before backward; computing SR/BN loss through them
-        # fires their gradient hook twice → "marked ready twice" crash.
-        # enc_combiners are saved finest-first then reversed: decoder group g uses enc_combiners[G-1-g].
         G = sum(self.gps)
         self._group_enc_combiner = [None]
         for g in range(1, G):
@@ -142,6 +136,7 @@ class AutoEncoder(nn.Module):
         H_ftr0 = cfg['input_size'] // spatial_scale
         self.prior_ftr0 = nn.Parameter(torch.rand(C_ftr0, H_ftr0, H_ftr0) * 0.01)
 
+        # decoder tower
         self.dec_cells = nn.ModuleList()
         self.dec_combiners = nn.ModuleList()
         self.dec_ups = nn.ModuleList()
@@ -164,6 +159,7 @@ class AutoEncoder(nn.Module):
                 self.dec_ups.append(nn.Conv2d(C, C_next, 1, bias=True))
                 dec_mult /= CHANNEL_MULT
 
+        # post-process blocks (upsample back to input resolution)
         self.post_blocks = nn.ModuleList()
         post_mult = dec_mult
         for _ in range(self.num_prepost_blocks):
@@ -179,7 +175,7 @@ class AutoEncoder(nn.Module):
                     block.append(ResidualCellDecoder(C_o, expansion=3, use_se=self.use_se))
             self.post_blocks.append(block)
 
-        # ----------------------------------------------------------- image head
+        # image head
         C_out_head = int(C0 * post_mult)
         if self.decoder_type == 'bernoulli':
             self.image_head = nn.Sequential(
@@ -192,8 +188,7 @@ class AutoEncoder(nn.Module):
                 nn.Conv2d(C_out_head, 10 * self.num_mix, 3, padding=1, bias=True),
             )
 
-        # prog_heads[k-1]: output head used when only k < num_scales scales are active.
-        # MSE against avg-pooled x replaces DiscMixLogistic/Bernoulli during growing stages.
+        # prog_heads[k-1]: output head used when only k < num_scales scales are active
         self.use_progressive = cfg.get('progressive', False)
         if self.use_progressive and self.num_scales > 1:
             out_ch = 1 if self.decoder_type == 'bernoulli' else C_in
@@ -208,7 +203,7 @@ class AutoEncoder(nn.Module):
                 ph_mult /= CHANNEL_MULT
 
         # aux_heads: one per coarse scale; reconstruct avg-pooled x to give coarse z's a direct
-        # pixel signal that finer groups cannot absorb (Proposal 2, aux_recon=true in config).
+        # pixel signal that finer groups cannot absorb
         self.use_aux_recon = cfg.get('aux_recon', False)
         if self.use_aux_recon:
             self.n_aux = min(int(cfg.get('aux_scales', 1)), self.num_scales - 1)
@@ -227,11 +222,10 @@ class AutoEncoder(nn.Module):
                 ))
                 aux_mult /= CHANNEL_MULT
 
-        # kl_alpha: per-group KL weight proportional to spatial area (finer = larger weight, mean=1).
+        # kl_alpha: per-group KL weight proportional to spatial area
         self.register_buffer('kl_alpha', self._compute_kl_alpha())
 
-        # Spectral regularization: track left/right singular vectors per conv layer.
-        # Exclude aux_heads and prog_heads — they're small prediction heads, not part of the encoder.
+        # Spectral regularization: track left/right singular vectors per conv layer
         self.all_conv_layers = []
         self.sr_u = {}
         self.sr_v = {}
@@ -250,7 +244,7 @@ class AutoEncoder(nn.Module):
             ])
 
     def _compute_kl_alpha(self):
-        # Weight = (2^s_idx)^2 / groups_at_scale, normalized so min=1 (matches official NVAE).
+        # Weight = (2^s_idx)^2 / groups_at_scale, normalized so min=1
         weights = []
         for s_idx in range(self.num_scales):
             enc_s = self.num_scales - 1 - s_idx
@@ -343,14 +337,14 @@ class AutoEncoder(nn.Module):
         """Returns (logits, kl_all, aux_outs). active_scales=k locks finer scales to prior (progressive training)."""
         if active_scales is None:
             active_scales = self.num_scales
+        # stem + pre-process
         s = self.stem(2.0 * x - 1.0)
 
         for block in self.pre_blocks:
             for cell in block:
                 s = cell(s)
 
-        # Bottom-up encoder: save features + combiner refs for decoder use.
-        # EncCombinerCells are NOT applied here — they also need the decoder state.
+        # Bottom-up encoder: save features + combiner refs for decoder use
         saved_enc = []
         saved_comb = []
         comb_idx = 0
@@ -373,7 +367,7 @@ class AutoEncoder(nn.Module):
 
         ftr = self.enc_bottleneck(s)
 
-        # Top-down decoder: iterate coarsest-to-finest; encoder features consumed in reverse.
+        # Top-down decoder: iterate coarsest-to-finest; encoder features consumed in reverse
         saved_enc.reverse()
         saved_comb.reverse()
 
@@ -384,13 +378,11 @@ class AutoEncoder(nn.Module):
         aux_outs = [] if self.use_aux_recon else None
         enc_idx = dec_cell_idx = dec_samp_idx = up_idx = global_group = 0
 
-        # prog_growing: stop at active_scales, use prog_heads output, skip post+image_head.
         prog_growing = self.use_progressive and active_scales < self.num_scales
         loop_scales = active_scales if prog_growing else self.num_scales
 
         for s_idx in range(loop_scales):
             enc_s = self.num_scales - 1 - s_idx
-            # scale_locked: non-progressive path only; prog_growing already limits loop_scales.
             scale_locked = (not prog_growing) and (s_idx >= active_scales)
 
             for g in range(self.gps[enc_s]):
@@ -409,8 +401,6 @@ class AutoEncoder(nn.Module):
                     dec_samp_idx += 1
 
                     if scale_locked:
-                        # Locked group (non-progressive path): posterior collapses to the
-                        # prior. z is drawn from p (no encoder signal), KL = 0 exactly.
                         q = p
                     else:
                         # Posterior (residual parameterization)
@@ -444,7 +434,7 @@ class AutoEncoder(nn.Module):
                         kl = q.kl(p).sum(dim=[1, 2, 3])
                 kl_all.append(kl)
 
-                # dec_combiner before dec_cells: z conditions the residual computation.
+                # dec_combiner before dec_cells: z conditions the residual computation
                 dec_state = self.dec_combiners[global_group](dec_state, z)
                 global_group += 1
 
@@ -461,6 +451,7 @@ class AutoEncoder(nn.Module):
                 dec_state = self.dec_ups[up_idx](dec_state)
                 up_idx += 1
 
+        # post-process + image head
         if prog_growing:
             logits = self.prog_heads[active_scales - 1](dec_state)
         else:
@@ -525,10 +516,7 @@ class AutoEncoder(nn.Module):
 
     @torch.no_grad()
     def explore_from_group(self, z_prefix, start_group, device, t=1.0):
-        """Fix z_{0..start_group-1}; resample z_{start_group..L-1} from learned priors.
-
-        Avoids OOD z's from naive N(0,t) replacement by using conditioned prior samples.
-        """
+        """Fix z_{0..start_group-1}; resample z_{start_group..L-1} from learned priors."""
         batch_size = z_prefix[0].size(0)
         dec_state = self.prior_ftr0.unsqueeze(0).expand(batch_size, -1, -1, -1).to(device)
         dec_cell_idx = up_idx = global_group = 0

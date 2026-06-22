@@ -1,7 +1,3 @@
-# CIFAR-10 3-scale 8-group + Auxiliary Reconstruction. Based on cifar10_8x3.yaml.
-# aux head reads decoder state before fine groups are injected → coarse z's get a direct pixel gradient
-# the fine groups cannot absorb. Raise aux_weight if coarse KL (groups 0–7) stays at 0.
-
 model:
   input_channels: 3
   input_size: 32
@@ -18,7 +14,7 @@ model:
   use_se: true
   res_dist: true
   decoder: disc_mix_logistic
-  aux_recon: true
+  aux_recon: true              # auxiliary head on coarse decoder state
 
 training:
   epochs: 600
@@ -33,5 +29,4 @@ training:
   grad_clip: 200.0
   optimizer: adamax
   weight_decay: 0.0003
-  accum_steps: 1
-  aux_weight: 1.0
+  aux_weight: 1.0              # raise if coarse KL stays at 0

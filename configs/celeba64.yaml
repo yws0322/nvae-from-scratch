@@ -1,31 +1,29 @@
-# CelebA-64 — matches official NVAE README (8 × V100-16GB, 90 epochs)
-
 model:
   input_channels: 3
   input_size: 64
-  initial_channels: 64          # official: --num_channels_enc/dec 64
-  num_scales: 3                  # official: --num_latent_scales 3
-  num_groups_per_scale: 20       # official: --num_groups_per_scale 20
-  is_adaptive: true              # official: --ada_groups
+  initial_channels: 64
+  num_scales: 3
+  num_groups_per_scale: 20
+  is_adaptive: true
   min_groups_per_scale: 1
-  num_prepost_blocks: 1          # official: --num_preprocess_blocks 1
-  num_prepost_cells: 2           # official: --num_preprocess_cells 2
-  num_cells_per_group: 2         # official: --num_cell_per_cond_enc/dec 2
-  num_latent_per_group: 20       # official: --num_latent_per_group 20
+  num_prepost_blocks: 1
+  num_prepost_cells: 2
+  num_cells_per_group: 2
+  num_latent_per_group: 20
   num_logistic_mixtures: 10
-  use_se: true                   # official: --use_se
-  res_dist: true                 # official: --res_dist
+  use_se: true
+  res_dist: true
 
 training:
-  epochs: 90                     # official: --epochs 90
-  batch_size: 16                 # official: --batch_size 16 (×8 GPUs = 128 effective)
+  epochs: 90
+  batch_size: 64
   base_lr: 0.01
   lr_min: 0.0001
   warmup_epochs: 5
   kl_anneal_portion: 0.3
   kl_const_portion: 0.0001
-  weight_decay_norm: 0.1         # official: --weight_decay_norm 1e-1
+  weight_decay_norm: 0.1
   bn_weight_decay: 0.01
   grad_clip: 200.0
-  optimizer: adamax              # official: --fast_adamax
+  optimizer: adamax
   weight_decay: 0.0003

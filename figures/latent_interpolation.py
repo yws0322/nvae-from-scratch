@@ -59,7 +59,6 @@ def main():
     img_a = load_image(args.img1, H, device)
     img_b = load_image(args.img2, H, device)
 
-    # Recalibrate BN running stats in train mode before encoding.
     print('Recalibrating BN stats...')
     model.train()
     with torch.no_grad():
@@ -68,6 +67,7 @@ def main():
             model(img_b)
     model.eval()
 
+    # encode both images, interpolate in latent space
     with torch.no_grad():
         z_a = model.encode(img_a)
         z_b = model.encode(img_b)

@@ -85,10 +85,7 @@ def progressive_active_scales(epoch, boundaries, num_scales):
 
 def progressive_group_coeff(epoch, boundaries, num_scales, group_scale,
                             warmup_epochs, device, min_coeff=1e-4):
-    """Per-group KL multiplier: 0 for locked scales, linearly ramped for recently-unlocked, 1 otherwise.
-
-    Scale 0 (coarsest, unlocked at epoch 0) always gets 1.0 — it was never locked so no ramp needed.
-    """
+    """Per-group KL multiplier: 0 for locked scales, linearly ramped for recently-unlocked, 1 otherwise."""
     unlock_epoch = [0] + list(boundaries)
     active = progressive_active_scales(epoch, boundaries, num_scales)
     coeffs = []

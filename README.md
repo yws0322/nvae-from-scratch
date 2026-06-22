@@ -1,23 +1,21 @@
 # NVAE from Scratch
 
-PyTorch implementation of [NVAE: A Deep Hierarchical Variational Autoencoder](https://arxiv.org/abs/2007.03898) (Vahdat & Kautz, NeurIPS 2020), built from first principles. Trained and evaluated on MNIST, CIFAR-10, and CelebA-64.
+PyTorch reimplementation of [NVAE: A Deep Hierarchical Variational Autoencoder](https://arxiv.org/abs/2007.03898) (Vahdat & Kautz, NeurIPS 2020), built from scratch. Trained and evaluated on MNIST, CIFAR-10, and CelebA-64.
 
 ## Setup
 
 ```bash
 # install uv if needed: curl -LsSf https://astral.sh/uv/install.sh | sh
-uv sync   # installs all dependencies including torch==2.5.1+cu121
+uv sync
 ```
 
-**Requirements:** NVIDIA GPU with CUDA 12.1+. Tested on A100 80GB × 2.
+Requires an NVIDIA GPU with CUDA 12.1+. Tested on H100 80GB × 2.
 
 ## Datasets
 
-Default data path: `dataset/` (project root). Override with `--data_path /your/path`.
+MNIST and CIFAR-10 are downloaded automatically into `dataset/` on first run.
 
-**MNIST / CIFAR-10** — downloaded automatically into `dataset/` on first run.
-
-**CelebA-64** — requires manual download from [Kaggle](https://www.kaggle.com/datasets/jessicali9530/celeba-dataset). Download into `dataset/`:
+CelebA-64 requires manual download from [Kaggle](https://www.kaggle.com/datasets/jessicali9530/celeba-dataset):
 
 ```bash
 # requires ~/.kaggle/kaggle.json
@@ -38,27 +36,21 @@ dataset/
 ## Project Structure
 
 ```
-train.py                  training loop (AdaMax, KL annealing, AMP, DDP)
-evaluation.py             IW-NLL evaluation (importance-weighted, K=200)
-configs/                  one YAML per experiment
-figures/                  scripts to generate visualizations
-  sample.py               unconditional samples from a checkpoint
-  reconstruction.py       original vs. reconstruction side-by-side
-  latent_interpolation.py spherical interpolation between two images
-  latent_space_exploration.py  per-group latent perturbation grid
-  cherry.py               interactive cherry-picking of samples
+train.py                       training loop (AdaMax, KL annealing, AMP, DDP)
+evaluation.py                  IW-NLL evaluation (importance-weighted, K=200)
+configs/                       one YAML per experiment
+figures/                       visualization scripts
 src/
-  model.py                AutoEncoder (hierarchical encoder/decoder tower)
+  model.py                     AutoEncoder (hierarchical encoder/decoder tower)
   modules/
-    architecture.py       ResidualCell{Encoder,Decoder}, Combiner, SE, NF cells
-    distributions.py      Normal (residual KL), DiscMixLogistic
-  utils.py                KL balancer, free bits, LR schedule, BN calibration
-logs/                     training logs for all experiments
+    architecture.py            ResidualCell{Encoder,Decoder}, Combiner, SE, NF cells
+    distributions.py           Normal (residual KL), DiscMixLogistic
+  utils.py                     KL balancer, free bits, LR schedule, BN calibration
 ```
 
 ## Training
 
-All commands run from the project root. Use `--amp` for bfloat16 (recommended on A100).
+All commands run from the project root. `--amp` enables bfloat16 mixed precision (recommended).
 
 ```bash
 # MNIST
@@ -92,25 +84,25 @@ torchrun --nproc_per_node=2 train.py --config configs/celeba64_aux.yaml --datase
 torchrun --nproc_per_node=2 train.py --config configs/celeba64_progressive.yaml --dataset celeba64 --run_name celeba64_progressive --amp
 ```
 
-**Arguments:**
+Checkpoints are saved to `runs/<run_name>_last.pt`. To resume: add `--resume_from runs/<run_name>_last.pt`.
 
-| Argument | Description |
-|---|---|
-| `--config` | YAML config file path |
-| `--dataset` | `cifar10` / `mnist` / `celeba64` |
-| `--run_name` | checkpoint name; saved to `runs/<run_name>_last.pt` |
-| `--amp` | bfloat16 mixed precision (recommended on A100) |
-| `--resume_from` | resume training from a checkpoint path |
-| `--batch_size` | override batch size from config |
-| `--accum_steps` | gradient accumulation steps (effective bs = bs × GPUs × accum_steps) |
-| `--nf_cells` | normalizing flow blocks per latent group (0 = disabled) |
-| `--base_lr` | override learning rate from config |
-| `--data_path` | dataset directory (default: `dataset/`) |
-| `--nproc_per_node` | number of GPUs for multi-GPU training via `torchrun` |
+Key arguments:
+
+- `--config` — YAML config file
+- `--dataset` — `cifar10` / `mnist` / `celeba64`
+- `--run_name` — name used for checkpoint files
+- `--amp` — bfloat16 mixed precision
+- `--resume_from` — path to checkpoint to resume from
+- `--batch_size` — override batch size from config
+- `--accum_steps` — gradient accumulation (effective bs = bs × GPUs × accum_steps)
+- `--nf_cells` — normalizing flow blocks per latent group (0 = disabled)
+- `--base_lr` — override learning rate from config
+- `--data_path` — dataset directory (default: `dataset/`)
+- `--nproc_per_node` — number of GPUs (torchrun)
 
 ## Evaluation
 
-IW-NLL with K=200 importance samples (same as reported results):
+IW-NLL with K=200 importance samples:
 
 ```bash
 uv run python evaluation.py --ckpt runs/cifar10_last.pt --K 200
@@ -118,28 +110,28 @@ uv run python evaluation.py --ckpt runs/cifar10_last.pt --K 200
 
 ## Visualization
 
-All figure scripts run from the project root.
+All scripts run from the project root.
 
 ```bash
-# Unconditional samples (saves grid to samples/)
+# unconditional samples
 uv run python figures/sample.py --ckpt runs/celeba64_last.pt --config configs/celeba64.yaml --dataset celeba64 --t 0.7 --n 64
 
-# Original vs. reconstruction side-by-side
+# original vs. reconstruction
 uv run python figures/reconstruction.py --ckpt runs/cifar10_last.pt --config configs/cifar10.yaml --dataset cifar10
 
-# Latent interpolation between two images
+# latent interpolation between two images
 uv run python figures/latent_interpolation.py --ckpt runs/celeba64_last.pt --config configs/celeba64.yaml img1.png img2.png --steps 6
 
-# Per-group latent space exploration (what each latent group controls)
+# per-group latent exploration
 uv run python figures/latent_space_exploration.py --ckpt runs/cifar10_8x3_last.pt --config configs/cifar10_8x3.yaml
 
-# Interactive cherry-picking of generated samples
+# interactive cherry-picking
 uv run python figures/cherry.py --ckpt runs/celeba64_last.pt --config configs/celeba64.yaml --t 0.7 --winners 9
 ```
 
 ## Results
 
-IW-NLL evaluated with 200 importance samples. MNIST reported in nats; others in bpd (lower is better).
+IW-NLL evaluated with 200 importance samples. MNIST in nats; others in bpd (lower is better).
 
 | Dataset | Model | Paper | Ours |
 |---|---|---|---|
@@ -152,7 +144,7 @@ IW-NLL evaluated with 200 importance samples. MNIST reported in nats; others in 
 
 ### Addressing Coarse-Scale Posterior Collapse
 
-Multi-scale NVAE suffers from posterior collapse at coarse latent groups — fine-resolution groups explain the data on their own, leaving coarse groups unused. Three approaches were evaluated:
+Multi-scale NVAE suffers from posterior collapse at coarse latent groups: fine-resolution groups explain the data on their own, leaving coarse groups unused. Three approaches were evaluated:
 
 | Method | CIFAR-10 coarse KL | CelebA coarse KL | CelebA bpd |
 |---|---|---|---|
@@ -161,4 +153,29 @@ Multi-scale NVAE suffers from posterior collapse at coarse latent groups — fin
 | + Auxiliary Reconstruction | groups 5–7 active | coarse + middle active | 2.63 |
 | + Progressive Training | — | coarse + middle active | **2.57** |
 
-Progressive Scale Training showed the strongest result: unlocking scales coarse→fine forces coarse groups to establish useful representations before finer scales are introduced.
+Progressive Scale Training showed the strongest result: unlocking scales coarse→fine forces coarse groups to establish useful representations before finer groups are introduced.
+
+## Trained Checkpoints
+
+Checkpoints are available on Hugging Face: [yws0322/nvae-from-scratch](https://huggingface.co/yws0322/nvae-from-scratch)
+
+| File | Dataset | Config |
+|---|---|---|
+| `mnist.pt` | MNIST 28×28 | 2-scale, adaptive |
+| `cifar10.pt` | CIFAR-10 32×32 | 1×30, 400ep |
+| `cifar10_600ep.pt` | CIFAR-10 32×32 | 1×30, 600ep |
+| `cifar10_8x3.pt` | CIFAR-10 32×32 | 3×8, 600ep |
+| `cifar10_8x3_aux.pt` | CIFAR-10 32×32 | 3×8 + Auxiliary Reconstruction |
+| `celeba64.pt` | CelebA-64 | 3-scale, adaptive |
+| `celeba64_aux.pt` | CelebA-64 | 3-scale + Auxiliary Reconstruction |
+| `celeba64_progressive.pt` | CelebA-64 | 3-scale + Progressive Training |
+
+Download with:
+
+```bash
+# single file
+hf download yws0322/nvae-from-scratch celeba64_progressive.pt --local-dir ckpts/
+
+# all checkpoints
+hf download yws0322/nvae-from-scratch --local-dir ckpts/
+```

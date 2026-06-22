@@ -94,26 +94,7 @@ class DecCombinerCell(nn.Module):
 
 
 class MaskedConv2d(nn.Conv2d):
-    """Autoregressive conv with raster-scan spatial ordering + lower-triangular channel ordering.
-
-    k=1 : pure channel autoregression (lower-triangular over channels).
-    k>1 : spatial raster-scan mask (future positions zeroed) plus channel ordering
-          at the center pixel. Top rows and left-of-center in the center row are
-          fully visible (any channel at a past spatial position is fine).
-
-    Supports channel expansion / compression: C_out need not equal C_in.
-    When C_out > C_in: output channels are grouped in blocks of C_out//C_in per input
-    channel, each block seeing only the strictly-earlier input groups (zero_diag=True)
-    or up to and including its own group (zero_diag=False).
-
-    zero_diag=True  : strict causal — channel i cannot depend on itself.
-                      Ensures ∂f_i/∂z_i = 0 on the first AR layer.
-    zero_diag=False : non-strict — channel i may depend on itself (used for layers
-                      that predict parameters, not residuals).
-
-    For depthwise convolutions (groups == C_in == C_out): only the spatial mask is
-    applied; channel ordering is preserved by the depthwise structure itself.
-    """
+    """Autoregressive conv with raster-scan spatial ordering + lower-triangular channel ordering."""
 
     def __init__(self, C_in, C_out, kernel_size=1, groups=1, zero_diag=True, **kwargs):
         if kernel_size > 1 and 'padding' not in kwargs:
@@ -124,8 +105,7 @@ class MaskedConv2d(nn.Conv2d):
 
     @staticmethod
     def _channel_mask(C_in, C_out, zero_diag):
-        """Lower-triangular channel mask supporting expansion (C_out >= C_in) and
-        compression (C_out <= C_in). Requires one to divide the other evenly."""
+        """Lower-triangular channel mask supporting expansion (C_out >= C_in) and compression (C_out <= C_in)."""
         mask = torch.zeros(C_out, C_in)
         if C_out >= C_in:
             assert C_out % C_in == 0, f"C_out {C_out} must be divisible by C_in {C_in}"
@@ -149,8 +129,7 @@ class MaskedConv2d(nn.Conv2d):
     def _build_mask(C_in, C_out, k, groups, zero_diag):
         m = k // 2
         if groups > 1:
-            # Depthwise: each output channel sees only its own input channel.
-            # Spatial raster-scan mask; channel ordering is implicit.
+            # Depthwise: each output channel sees only its own input channel
             assert groups == C_in and C_out == C_in, \
                 "depthwise expects groups == C_in == C_out"
             mask = torch.ones(C_out, 1, k, k)
@@ -178,27 +157,7 @@ class MaskedConv2d(nn.Conv2d):
 
 
 def _mix_log_cdf_flow(z, logit_pi, mu, log_s, log_a, b):
-    """Mixture-of-logistics CDF transform with analytic log-determinant.
-
-    Each channel is independently transformed by a K-component logistic mixture:
-        z_new_i = exp(log_a_i) * logit( Σ_k π_k · σ((z_i − μ_ik)/s_ik) ) + b_i
-
-    The Jacobian is lower-triangular in the combined (channel, spatial) ordering
-    because parameters for channel i depend only on channels j < i (AR masking).
-    The diagonal entries are d(z_new_i)/d(z_i), which gives the log-det.
-
-    Args:
-        z        : (B, C, H, W)
-        logit_pi : (B, C, K, H, W) — un-normalized mixture log-weights
-        mu       : (B, C, K, H, W) — mixture means
-        log_s    : (B, C, K, H, W) — log mixture scales
-        log_a    : (B, C, 1, H, W) — per-channel affine log-scale
-        b        : (B, C, 1, H, W) — per-channel affine bias
-
-    Returns:
-        z_new   : (B, C, H, W)
-        log_det : (B,)  — summed log |det J| over all C·H·W positions
-    """
+    """Mixture-of-logistics CDF transform with analytic log-determinant."""
     log_s = torch.clamp(log_s, min=-7.0)
     z_    = z.unsqueeze(2)                                          # (B,C,1,H,W)
 
@@ -221,12 +180,7 @@ def _mix_log_cdf_flow(z, logit_pi, mu, log_s, log_a, b):
 
 
 class NFCell(nn.Module):
-    """AR flow step: MaskedConv3×3(C→6C) → MaskedDWConv5×5 → MaskedConv1×1 → MixLogCDF transform.
-
-    param_conv is zero-initialized so the flow starts near identity (log_a≈0, b≈0).
-    reverse=True flips channels before/after the net to cover the upper-triangular AR direction.
-    Dummy output channel keeps C_out/C_in=2, an integer required by the expansion mask.
-    """
+    """AR flow step: MaskedConv3×3(C→6C) → MaskedDWConv5×5 → MaskedConv1×1 → MixLogCDF transform."""
 
     NUM_MIX = 3
 

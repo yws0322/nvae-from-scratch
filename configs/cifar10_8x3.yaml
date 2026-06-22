@@ -2,14 +2,14 @@ model:
   input_channels: 3
   input_size: 32
   initial_channels: 128
-  num_scales: 3
-  num_groups_per_scale: 8
+  num_scales: 3              # 3-scale hierarchy
+  num_groups_per_scale: 8    # 8 groups per scale (vs 30 in cifar10.yaml)
   is_adaptive: false
   min_groups_per_scale: 1
   num_prepost_blocks: 1
   num_prepost_cells: 2
   num_cells_per_group: 2
-  num_latent_per_group: 16
+  num_latent_per_group: 16   # reduced from 20
   num_logistic_mixtures: 10
   use_se: true
   res_dist: true
@@ -18,7 +18,7 @@ model:
 training:
   epochs: 600
   batch_size: 128
-  base_lr: 0.001
+  base_lr: 0.001             # tuned down from 0.01
   lr_min: 0.0005
   warmup_epochs: 5
   kl_anneal_portion: 0.3
@@ -28,4 +28,3 @@ training:
   grad_clip: 200.0
   optimizer: adamax
   weight_decay: 0.0003
-  accum_steps: 1

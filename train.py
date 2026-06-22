@@ -145,6 +145,7 @@ def train_epoch(model, raw_model, loader, optimizer, device,
     model.train()
     optimizer.zero_grad()
 
+    # LR schedule params
     accum_steps = cfg_train.get('accum_steps', 1)
     steps_per_epoch = max(len(loader) // accum_steps, 1)
     warmup_steps = cfg_train['warmup_epochs'] * steps_per_epoch
@@ -152,6 +153,7 @@ def train_epoch(model, raw_model, loader, optimizer, device,
 
     aux_weight = cfg_train.get('aux_weight', 1.0)
 
+    # epoch accumulators
     total_loss = total_recon = total_kl = total_aux = 0.0
     n_opt_steps = 0
     win_loss = win_recon = win_kl = win_sr = win_aux = 0.0
@@ -171,12 +173,10 @@ def train_epoch(model, raw_model, loader, optimizer, device,
 
         sync_ctx = contextlib.nullcontext() if (should_step or not is_ddp) else model.no_sync()
 
+        # forward + loss
         with sync_ctx:
             with torch.amp.autocast('cuda', dtype=torch.bfloat16, enabled=use_amp):
                 logits, kl_all, aux_outs = model(x, active_scales=active_scales)
-                # Progressive growing: active_scales < num_scales → logits are at the
-                # active scale's coarse resolution (e.g. 8×8), use MSE against avg-pooled x.
-                # Full mode: active_scales == num_scales → normal DiscMixLogistic / Bernoulli.
                 prog_growing = (active_scales is not None
                                 and active_scales < raw_model.num_scales
                                 and raw_model.use_progressive)
@@ -212,6 +212,7 @@ def train_epoch(model, raw_model, loader, optimizer, device,
 
             (loss / accum_steps).backward()
 
+        # NaN guard
         if torch.isnan(loss):
             nan_recon = torch.isnan(recon_loss).item()
             nan_kl    = torch.isnan(kl_loss).item()
@@ -235,6 +236,7 @@ def train_epoch(model, raw_model, loader, optimizer, device,
             win_aux += aux_loss.item()
         win_count += 1
 
+        # optimizer step + LR update
         if should_step:
             nn.utils.clip_grad_norm_(model.parameters(), cfg_train['grad_clip'])
             optimizer.step()
@@ -361,6 +363,7 @@ def main():
                         help='Enable automatic mixed precision (float16 forward, float32 grads)')
     args = parser.parse_args()
 
+    # config + CLI overrides
     cfg = load_config(args.config)
     cfg_model = cfg['model']
     cfg_train = cfg['training']
@@ -383,6 +386,7 @@ def main():
               f'per-GPU bs: {cfg_train["batch_size"]} | accum: {accum} | effective bs: {eff_bs} | '
               f'AMP: {use_amp}')
 
+    # WandB
     wandb_run = None
     if is_main and args.logging:
         import wandb
@@ -408,6 +412,7 @@ def main():
             },
         )
 
+    # datasets + dataloaders
     train_ds = get_dataset(args.dataset, args.data_path, train=True)
     val_ds   = get_dataset(args.dataset, args.data_path, train=False)
 
@@ -454,6 +459,7 @@ def main():
     # propagate progressive flag to model config so AutoEncoder builds prog_heads.
     cfg_model['progressive'] = use_progressive
 
+    # model + optimizer
     model = AutoEncoder(cfg_model).to(device)
     if is_ddp:
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
@@ -476,6 +482,7 @@ def main():
         lr=cfg_train['base_lr'], eps=1e-3,
     )
 
+    # resume from checkpoint
     start_epoch = 0
     step = 0
     if args.resume_from and os.path.exists(args.resume_from):
@@ -501,14 +508,15 @@ def main():
         metric_norm  = 1.0
         metric_label = 'nll'
     else:
-        metric_norm  = H * W * C * 0.6931472   # nats → bpd
+        metric_norm  = H * W * C * 0.6931472
         metric_label = 'bpd'
 
-    # Free bits: per-group KL floor (Proposal 1). Scalar or per-scale list in config.
+    # free bits: per-group KL floor
     free_bits_cfg = cfg_train.get('free_bits', None)
     free_bits = (build_free_bits(raw_model.gps, num_scales, free_bits_cfg)
                  if free_bits_cfg is not None else None)
 
+    # training loop
     for epoch in range(start_epoch, total_epochs):
         if train_sampler is not None:
             train_sampler.set_epoch(epoch)

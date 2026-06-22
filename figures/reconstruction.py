@@ -4,22 +4,10 @@ Encodes a batch of images and decodes them back, then shows
   original | reconstruction
 side-by-side for each image.
 
-Optionally samples from the prior alongside each reconstruction to show the
-difference between encode→decode quality and unconditional generation.
-
 Usage:
-    # Reconstruct 8 images from the validation set
     uv run python reconstruction.py --ckpt runs/cifar10_v1_last.pt
-
-    # Use specific image files
-    uv run python reconstruction.py --ckpt runs/cifar10_v1_last.pt img1.png img2.png img3.png
-
-    # Also add prior samples as a third column
-    uv run python reconstruction.py --ckpt runs/cifar10_v1_last.pt --with_prior
-
-    # CelebA checkpoint
-    uv run python reconstruction.py --ckpt runs/celeba64_last.pt \\
-        --config configs/celeba64_progressive.yaml --dataset celeba64 --n 16
+    uv run python reconstruction.py --ckpt runs/cifar10_v1_last.pt img1.png img2.png
+    uv run python reconstruction.py --ckpt runs/celeba64_last.pt --config configs/celeba64.yaml --dataset celeba64 --n 16
 """
 
 import argparse
@@ -95,7 +83,7 @@ def main():
     epoch = ckpt['epoch']
     print(f'Loaded checkpoint (epoch {epoch})')
 
-    # ------------------------------------------------------------------ images
+    # load images
     if args.imgs:
         originals = torch.cat([load_image(p, H, device) for p in args.imgs])
     else:
@@ -104,7 +92,6 @@ def main():
     n = originals.size(0)
     print(f'Reconstructing {n} images...')
 
-    # -------------------------------------------------------- BN recalibration
     print('Recalibrating BN stats...')
     model.train()
     with torch.no_grad():
@@ -112,24 +99,21 @@ def main():
             model(originals)
     model.eval()
 
-    # ------------------------------------------------------------ encode/decode
+    # encode → decode
     with torch.no_grad():
         z_list = model.encode(originals)
         recons = to_01(model.decode_from_z(z_list), model.decoder_type)
 
-    # -------------------------------------------------------------------- grid
-    # Layout: row 0 = originals, row 1 = reconstructions
     orig_row = originals.cpu()
     if args.dataset == 'mnist':
         # grayscale → repeat to RGB for consistent display
         orig_row = orig_row.expand(-1, 3, -1, -1)
 
     rows = [orig_row, recons.cpu()]
-
-    # stack so make_grid(nrow=n) produces the multi-row layout
     grid_imgs = torch.cat(rows, dim=0)           # (rows*n, C, H, W)
     grid = make_grid(grid_imgs, nrow=n, padding=2, normalize=False)
 
+    # save grid (originals top, reconstructions bottom)
     os.makedirs(args.out_dir, exist_ok=True)
     path = os.path.join(args.out_dir, f'e{epoch}_recon_n{n}.png')
     save_image(grid, path)

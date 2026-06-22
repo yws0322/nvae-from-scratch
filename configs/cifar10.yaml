@@ -1,12 +1,9 @@
-# CIFAR-10 config — matches paper Table 6 (appendix)
-# Results: 2.91 bpd (w/ NF), 2.93 bpd (w/o NF)
-
 model:
   input_channels: 3
   input_size: 32
   initial_channels: 128
-  num_scales: 1
-  num_groups_per_scale: 30
+  num_scales: 1              # single-scale (paper Table 6)
+  num_groups_per_scale: 30   # target 2.93 bpd w/o NF, 2.91 w/ NF
   is_adaptive: false
   min_groups_per_scale: 1
   num_prepost_blocks: 1
@@ -15,18 +12,18 @@ model:
   num_latent_per_group: 20
   num_logistic_mixtures: 10
   use_se: true
-  res_dist: true   # residual posterior parameterization
+  res_dist: true
 
 training:
   epochs: 400
-  batch_size: 32            # per GPU (paper uses 32 on 8 GPUs = 256 total)
-  base_lr: 0.01             # scaled with total batch size / 512 in multi-GPU
-  lr_min: 0.0001            # cosine decay floor (official NVAE uses 1e-4)
+  batch_size: 128
+  base_lr: 0.01
+  lr_min: 0.0001
   warmup_epochs: 5
-  kl_anneal_portion: 0.3    # linear anneal over 30% of training
+  kl_anneal_portion: 0.3
   kl_const_portion: 0.0001
   weight_decay_norm: 0.1
-  bn_weight_decay: 0.01     # BN regularization weight
+  bn_weight_decay: 0.01
   grad_clip: 200.0
   optimizer: adamax
-  weight_decay: 0.0003      # L2 regularization on all params (official uses 3e-4)         # AdaMax from paper
+  weight_decay: 0.0003

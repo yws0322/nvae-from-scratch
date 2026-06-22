@@ -43,7 +43,6 @@ def make_per_scale_grid(perturbed, gps, nrow=10, padding=2):
         scales.append(perturbed[idx:idx + n])
         idx += n
 
-    # scales is already coarse→fine; display top→bottom
     rows = []
     for scale_imgs in scales:
         remainder = len(scale_imgs) % nrow
@@ -96,6 +95,7 @@ def main():
     os.makedirs(args.out_dir, exist_ok=True)
     bn_saved = set_bn(model, device, t=args.t, num_samples=2, iters=args.bn_iters)
 
+    # for each base image: perturb one group at a time, decode, save grid
     with torch.no_grad():
         for i in range(args.n):
             img_base, z_list = model.sample_with_z(1, device, t=args.t)
