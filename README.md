@@ -146,14 +146,12 @@ IW-NLL evaluated with 200 importance samples. MNIST in nats; others in bpd (lowe
 
 Multi-scale NVAE suffers from posterior collapse at coarse latent groups: fine-resolution groups explain the data on their own, leaving coarse groups unused. Three approaches were evaluated:
 
-| Method | CIFAR-10 coarse KL | CelebA coarse KL | CelebA bpd |
-|---|---|---|---|
-| Baseline (3×8) | → 0 (collapsed) | → 0 (collapsed) | 2.63 |
-| + Free Bits | persistent collapse | persistent collapse | — |
-| + Auxiliary Reconstruction | groups 5–7 active | coarse + middle active | 2.63 |
-| + Progressive Training | — | coarse + middle active | **2.57** |
-
-Progressive Scale Training showed the strongest result: unlocking scales coarse→fine forces coarse groups to establish useful representations before finer groups are introduced.
+| Method | CIFAR-10 coarse KL | CelebA coarse KL | CelebA bpd | Notes |
+|---|---|---|---|---|
+| Baseline (3×8) | ✗ collapsed | ✗ collapsed | 2.63 | |
+| + Free Bits | ✗ collapsed | ✗ collapsed | — | |
+| + Auxiliary Reconstruction | ~ partial | ✓ active | — | coarse groups activate but sample quality degrades |
+| + Progressive Training | not evaluated | ~ partial | **2.57** | best bpd; coarse re-collapses as finer scales unlock |
 
 ## Trained Checkpoints
 
